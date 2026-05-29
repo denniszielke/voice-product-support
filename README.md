@@ -119,23 +119,23 @@ Bing Custom Search, Storage, Log Analytics, and Application Insights.
 
 ### 2. Agents (manual)
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 pip install -r src/requirements.txt
-cd tools && python3 deploy_agents.py
+cd tools && python deploy_agents.py
 ```
 
 ### 3. Test with A2A clients
 ```bash
 cd src
-python3 a2a/bike-concierge-agent-client.py
-python3 a2a/repair-status-agent-client.py
-python3 a2a/support-hotline-agent-client.py
+python a2a/bike-concierge-agent-client.py
+python a2a/repair-status-agent-client.py
+python a2a/support-hotline-agent-client.py
 ```
 
 ### 4. Delete all agents
 ```bash
-cd tools && python3 delete_agents.py
+cd tools && python delete_agents.py
 ```
 
 ## Environment Variables

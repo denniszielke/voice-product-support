@@ -8,16 +8,22 @@ children's bikes from the catalogue.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Allow imports from src root when running standalone
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("azure").setLevel(logging.WARNING)
 
-load_dotenv(dotenv_path=Path(__file__).resolve().parents[3] / ".env")
+# Allow imports from src root when running standalone
+_src_root = Path(__file__).resolve().parents[2] if len(Path(__file__).resolve().parents) > 2 else Path(__file__).resolve().parent
+sys.path.insert(0, str(_src_root))
+
+_env_path = Path(__file__).resolve().parents[3] / ".env" if len(Path(__file__).resolve().parents) > 3 else None
+load_dotenv(dotenv_path=_env_path if _env_path and _env_path.exists() else None)
 
 from azure.core.credentials import AzureKeyCredential
 from azure.identity import DefaultAzureCredential

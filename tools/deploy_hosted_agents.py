@@ -130,7 +130,7 @@ def deploy() -> None:
                 image=image_tag,
                 environment_variables=env_vars,
             ),
-            metadata={"enableVnextExperience": "true"},
+            metadata={"enableVnextExperience": "true", "voiceLiveCompatible": "true"},
             headers={"Foundry-Features": "HostedAgents=V1Preview"},
         )
         print(f"Hosted agent '{config.name}' created: {agent.id}")
@@ -139,6 +139,7 @@ def deploy() -> None:
             protocols=[
                 AgentEndpointProtocol.RESPONSES,
                 AgentEndpointProtocol.A2A,
+                AgentEndpointProtocol.INVOCATIONS,
             ],
         )
         agent_card = AGENT_CARDS.get(config.name)

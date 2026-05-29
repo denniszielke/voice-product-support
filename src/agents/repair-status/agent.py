@@ -48,6 +48,7 @@ load_dotenv()
 
 if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     configure_azure_monitor(enable_live_metrics=True, logger_name="__main__")
+    logging.getLogger("azure").setLevel(logging.WARNING)
 
 deployment_name = os.environ.get("MODEL_DEPLOYMENT_NAME") or os.environ["AZURE_AI_MODEL_DEPLOYMENT_NAME"]
 project_endpoint = os.environ.get("FOUNDRY_PROJECT_ENDPOINT") or os.environ["AZURE_AI_PROJECT_ENDPOINT"]

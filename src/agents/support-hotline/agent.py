@@ -7,9 +7,13 @@ to provide up-to-date, internet-grounded repair and maintenance guidance.
 
 from __future__ import annotations
 
+import logging
 import os
 
 import httpx
+
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("azure").setLevel(logging.WARNING)
 from agent_framework import MCPStreamableHTTPTool
 from agent_framework_foundry import FoundryChatClient
 from agent_framework_foundry_hosting import ResponsesHostServer

@@ -79,6 +79,7 @@ def deploy() -> None:
     concierge = client.agents.create_version(
         agent_name="bike-concierge",
         description="CyclePro Bike Support Concierge — classifies intent and routes to specialist agents",
+        metadata={"voiceLiveCompatible": "true"},
         definition=PromptAgentDefinition(
             model=model,
             instructions=CONCIERGE_SYSTEM_PROMPT,
@@ -97,6 +98,7 @@ def deploy() -> None:
         protocols=[
             AgentEndpointProtocol.RESPONSES,
             AgentEndpointProtocol.A2A,
+            AgentEndpointProtocol.INVOCATIONS,
         ],
     )
 
