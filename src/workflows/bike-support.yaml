@@ -1,0 +1,69 @@
+kind: workflow
+trigger:
+  kind: OnConversationStart
+  id: trigger_bike_support
+  actions:
+    - kind: InvokeAzureAgent
+      id: action-concierge-route
+      agent:
+        name: bike-concierge
+      input:
+        messages: =System.LastMessage
+      output:
+        autoSend: true
+        responseObject: Local.ConciergeResult
+    - kind: ConditionGroup
+      id: action-route
+      conditions:
+        - condition: |-
+            =If(
+                Text(Local.ConciergeResult.next_agent) = "product-guide",
+                true,
+                false
+            )
+          id: route-product-guide
+          actions:
+            - kind: InvokeAzureAgent
+              id: action-product-guide
+              agent:
+                name: product-guide
+              input:
+                messages: =System.LastMessage
+              output:
+                autoSend: true
+        - condition: |-
+            =If(
+                Text(Local.ConciergeResult.next_agent) = "support-hotline",
+                true,
+                false
+            )
+          id: route-support-hotline
+          actions:
+            - kind: InvokeAzureAgent
+              id: action-support-hotline
+              agent:
+                name: support-hotline
+              input:
+                messages: =System.LastMessage
+              output:
+                autoSend: true
+        - condition: |-
+            =If(
+                Text(Local.ConciergeResult.next_agent) = "repair-status",
+                true,
+                false
+            )
+          id: route-repair-status
+          actions:
+            - kind: InvokeAzureAgent
+              id: action-repair-status
+              agent:
+                name: repair-status
+              input:
+                messages: =System.LastMessage
+              output:
+                autoSend: true
+      elseActions: []
+id: ""
+name: bike-support
+description: "CyclePro AI voice product support workflow — routes to product guide, support hotline, or repair status agent"
