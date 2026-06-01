@@ -1,0 +1,9 @@
+# Pipecat WebRTC server dependencies
+pipecat-ai[azure,silero,smallwebrtc]==0.0.75
+pipecat-ai-subagents==0.0.4
+aiortc>=1.9.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+azure-identity>=1.15.0

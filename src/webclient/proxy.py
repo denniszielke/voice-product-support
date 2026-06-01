@@ -268,20 +268,11 @@ async def _upstream_to_browser(upstream, browser_ws, label: str) -> None:
                     "message": message,
                 }))
 
-            elif event_type in (
-                "response.created",
-                "response.output_item.added",
-                "response.output_item.done",
-                "response.content_part.added",
-                "response.content_part.done",
-                "response.audio.done",
-                "conversation.item.created",
-                "input_audio_buffer.committed",
-                "input_audio_buffer.cleared",
-            ):
-                pass  # Internal lifecycle events, no browser equivalent
+            elif event_type == "response.created":
+                pass  # Internal event, no browser equivalent
 
             else:
+                # Log unhandled events for debugging
                 print(f"[proxy] unhandled upstream event: {event_type}", file=sys.stderr)
 
     except websockets.ConnectionClosed:

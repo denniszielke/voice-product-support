@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CyclePro Voice Guide — WebRTC</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    margin: 0; padding: 16px; max-width: 960px; margin-inline: auto;
+  }
+  h1 { font-size: 1.3rem; margin: 0 0 12px; }
+  fieldset { border: 1px solid #8884; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+  legend { padding: 0 6px; font-weight: 600; }
+  label { display: block; font-size: 0.85rem; margin-bottom: 4px; }
+  input[type=text] {
+    width: 100%; box-sizing: border-box; padding: 6px 8px;
+    border: 1px solid #8886; border-radius: 6px; font: inherit;
+  }
+  button {
+    padding: 8px 14px; border-radius: 6px; border: 1px solid #8886;
+    background: #2d7cd6; color: white; font: inherit; cursor: pointer;
+    margin-right: 6px;
+  }
+  button.secondary { background: transparent; color: inherit; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status-pill {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    background: #8883; font-size: 0.85rem; margin-left: 8px;
+  }
+  .status-pill.connected { background: #1a8a3a; color: white; }
+  .status-pill.error { background: #b53030; color: white; }
+  #log {
+    height: 200px; overflow: auto; font-family: ui-monospace, monospace;
+    font-size: 0.8rem; background: #0001; padding: 8px; border-radius: 6px;
+    white-space: pre-wrap; margin-top: 8px;
+  }
+  .bubble { padding: 8px 12px; border-radius: 12px; margin: 6px 0; max-width: 80%; }
+  .user   { background: #2d7cd6; color: white; margin-left: auto; text-align: right; }
+  .bot    { background: #8882; }
+  #convo  { display: flex; flex-direction: column; min-height: 100px; }
+  .controls { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .indicator { width: 12px; height: 12px; border-radius: 50%; background: #888; display: inline-block; }
+  .indicator.speaking { background: #1a8a3a; animation: pulse 0.8s infinite alternate; }
+  .indicator.listening { background: #d6882d; animation: pulse 0.6s infinite alternate; }
+  @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<h1>🚴 CyclePro Voice Guide — WebRTC (Voice Live)</h1>
+
+<fieldset>
+  <legend>Connection</legend>
+  <label for="wsUrl">Signaling WebSocket URL</label>
+  <input type="text" id="wsUrl" value="" placeholder="ws://localhost:8090/ws" />
+  <div class="controls" style="margin-top: 10px;">
+    <button id="btnConnect" onclick="startSession()">Connect</button>
+    <button id="btnDisconnect" class="secondary" onclick="endSession()" disabled>Disconnect</button>
+    <span id="statusPill" class="status-pill">disconnected</span>
+    <span class="indicator" id="indicator"></span>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Conversation</legend>
+  <div id="convo"></div>
+</fieldset>
+
+<fieldset>
+  <legend>Events</legend>
+  <div id="log"></div>
+</fieldset>
+
+<script>
+// State
+let signalWs = null;
+let pc = null;
+let localStream = null;
+let dataChannel = null;
+let audioEl = null;
+
+const $ = id => document.getElementById(id);
+
+// Default WS URL based on current page
+const defaultWs = `ws://${location.hostname || 'localhost'}:8090/ws`;
+$('wsUrl').value = defaultWs;
+
+function log(msg) {
+  const el = $('log');
+  el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function setStatus(text, cls) {
+  const pill = $('statusPill');
+  pill.textContent = text;
+  pill.className = 'status-pill' + (cls ? ` ${cls}` : '');
+}
+
+function setIndicator(state) {
+  const ind = $('indicator');
+  ind.className = 'indicator' + (state ? ` ${state}` : '');
+}
+
+function addBubble(text, role) {
+  const div = document.createElement('div');
+  div.className = `bubble ${role}`;
+  div.textContent = text;
+  $('convo').appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth' });
+  return div;
+}
+
+// Accumulator for streaming transcripts
+let botTranscript = '';
+let botBubble = null;
+let userTranscript = '';
+let userBubble = null;
+
+// ---------------------------------------------------------------------------
+// Main session lifecycle
+// ---------------------------------------------------------------------------
+
+async function startSession() {
+  $('btnConnect').disabled = true;
+  $('btnDisconnect').disabled = false;
+  setStatus('connecting...');
+  log('Starting WebRTC session...');
+
+  try {
+    // 1. Connect signaling WebSocket to our server
+    const wsUrl = $('wsUrl').value.trim() || defaultWs;
+    signalWs = new WebSocket(wsUrl);
+
+    await new Promise((resolve, reject) => {
+      signalWs.onopen = resolve;
+      signalWs.onerror = () => reject(new Error('WebSocket connection failed'));
+    });
+    log('Signaling WebSocket connected');
+
+    // 2. Create peer connection
+    pc = new RTCPeerConnection();
+
+    // 3. Create data channel for non-audio events BEFORE creating offer
+    dataChannel = pc.createDataChannel('voice-live-events');
+    dataChannel.onopen = () => log('Data channel opened');
+    dataChannel.onclose = () => log('Data channel closed');
+    dataChannel.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      handleDataChannelEvent(msg);
+    };
+
+    // 4. Get microphone access
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    log('Microphone access granted');
+
+    // 5. Setup remote audio playback
+    audioEl = document.createElement('audio');
+    audioEl.autoplay = true;
+    document.body.appendChild(audioEl);
+
+    pc.ontrack = (event) => {
+      log('Remote audio track received');
+      audioEl.srcObject = event.streams[0];
+    };
+
+    // 6. Create and set local SDP offer
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    // 7. Wait for ICE gathering to complete
+    await new Promise(resolve => {
+      if (pc.iceGatheringState === 'complete') {
+        resolve();
+      } else {
+        pc.addEventListener('icegatheringstatechange', () => {
+          if (pc.iceGatheringState === 'complete') resolve();
+        });
+      }
+    });
+    log('ICE gathering complete');
+
+    // 8. Send SDP offer through signaling channel
+    signalWs.send(JSON.stringify({
+      type: 'rtc.call.sdp.create',
+      sdp_offer: pc.localDescription.sdp
+    }));
+    log('SDP offer sent to Voice Live API');
+
+    // 9. Listen for messages on the signaling WebSocket
+    signalWs.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      handleSignalingMessage(msg);
+    };
+
+    signalWs.onclose = () => {
+      log('Signaling WebSocket closed');
+      // Don't tear down — the WebRTC connection may still be active
+    };
+
+    signalWs.onerror = (err) => {
+      log(`Signaling WebSocket error: ${err}`);
+      setStatus('error', 'error');
+    };
+
+    setStatus('negotiating...');
+
+  } catch (err) {
+    log(`Error: ${err.message}`);
+    setStatus('error', 'error');
+    $('btnConnect').disabled = false;
+    $('btnDisconnect').disabled = true;
+    cleanup();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Handle messages from the signaling WebSocket (control channel)
+// ---------------------------------------------------------------------------
+
+function handleSignalingMessage(msg) {
+  const type = msg.type || '';
+  log(`Control: ${type}`);
+
+  switch (type) {
+    case 'rtc.call.sdp.created':
+      // Apply remote SDP answer to complete WebRTC negotiation
+      if (msg.sdp_answer) {
+        pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp_answer })
+          .then(() => {
+            log('Remote SDP answer applied — audio should begin flowing');
+            setStatus('connected', 'connected');
+          })
+          .catch(err => {
+            log(`Failed to set remote description: ${err}`);
+            setStatus('error', 'error');
+          });
+      }
+      break;
+
+    case 'session.created':
+      log(`Session created: ${msg.session?.id || 'unknown'}`);
+      break;
+
+    case 'session.updated':
+      log('Session configuration confirmed');
+      break;
+
+    case 'rtc.call.error':
+      log(`RTC Error [${msg.error?.code}]: ${msg.error?.message}`);
+      setStatus('error', 'error');
+      break;
+
+    case 'error':
+      log(`Error: ${msg.message || msg.error?.message || JSON.stringify(msg)}`);
+      setStatus('error', 'error');
+      break;
+
+    // Tool/function call events routed through control channel
+    case 'response.function_call_arguments.delta':
+      log(`Function call delta: ${msg.delta || ''}`);
+      break;
+
+    case 'response.function_call_arguments.done':
+      log(`Function call complete: ${msg.name || ''}`);
+      break;
+
+    default:
+      log(`Control (unhandled): ${type}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Handle messages from the WebRTC data channel
+// ---------------------------------------------------------------------------
+
+function handleDataChannelEvent(msg) {
+  const type = msg.type || '';
+
+  switch (type) {
+    case 'input_audio_buffer.speech_started':
+      setIndicator('listening');
+      // Reset user transcript accumulator
+      userTranscript = '';
+      userBubble = null;
+      break;
+
+    case 'input_audio_buffer.speech_stopped':
+      setIndicator('');
+      break;
+
+    case 'conversation.item.input_audio_transcription.completed':
+      // Final user speech transcription
+      if (msg.transcript) {
+        if (userBubble) {
+          userBubble.textContent = msg.transcript;
+        } else {
+          addBubble(msg.transcript, 'user');
+        }
+      }
+      userTranscript = '';
+      userBubble = null;
+      break;
+
+    case 'conversation.item.input_audio_transcription.delta':
+      userTranscript += (msg.delta || '');
+      if (!userBubble) {
+        userBubble = addBubble(userTranscript, 'user');
+      } else {
+        userBubble.textContent = userTranscript;
+      }
+      break;
+
+    case 'response.created':
+      setIndicator('speaking');
+      // Reset bot transcript accumulator
+      botTranscript = '';
+      botBubble = null;
+      break;
+
+    case 'response.audio_transcript.delta':
+      botTranscript += (msg.delta || '');
+      if (!botBubble) {
+        botBubble = addBubble(botTranscript, 'bot');
+      } else {
+        botBubble.textContent = botTranscript;
+      }
+      break;
+
+    case 'response.audio_transcript.done':
+      if (msg.transcript && botBubble) {
+        botBubble.textContent = msg.transcript;
+      }
+      botTranscript = '';
+      botBubble = null;
+      break;
+
+    case 'response.done':
+      setIndicator('');
+      break;
+
+    case 'response.text.delta':
+      botTranscript += (msg.delta || '');
+      if (!botBubble) {
+        botBubble = addBubble(botTranscript, 'bot');
+      } else {
+        botBubble.textContent = botTranscript;
+      }
+      break;
+
+    case 'response.text.done':
+      if (botBubble && msg.text) {
+        botBubble.textContent = msg.text;
+      }
+      botTranscript = '';
+      botBubble = null;
+      break;
+
+    default:
+      log(`Data: ${type}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Send session.update through the control channel
+// ---------------------------------------------------------------------------
+
+function sendSessionUpdate(sessionConfig) {
+  if (!signalWs || signalWs.readyState !== WebSocket.OPEN) {
+    log('Cannot send session.update — signaling WS not open');
+    return;
+  }
+  signalWs.send(JSON.stringify({
+    type: 'session.update',
+    session: sessionConfig
+  }));
+  log('Sent session.update');
+}
+
+// ---------------------------------------------------------------------------
+// Cleanup
+// ---------------------------------------------------------------------------
+
+function endSession() {
+  log('Ending session...');
+  cleanup();
+  setStatus('disconnected');
+  setIndicator('');
+  $('btnConnect').disabled = false;
+  $('btnDisconnect').disabled = true;
+}
+
+function cleanup() {
+  if (dataChannel) {
+    dataChannel.close();
+    dataChannel = null;
+  }
+  if (pc) {
+    pc.close();
+    pc = null;
+  }
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+  if (signalWs && signalWs.readyState === WebSocket.OPEN) {
+    signalWs.close();
+  }
+  signalWs = null;
+  if (audioEl) {
+    audioEl.srcObject = null;
+    audioEl.remove();
+    audioEl = null;
+  }
+}
+</script>
+</body>
+</html>
