@@ -1,4 +1,4 @@
-"""FastAPI server for Voice Live API with WebRTC.
+"""FastAPI server for Voice Live API with WebRTC using Agent Invocation.
 
 Architecture:
   Browser <──WebRTC──> Voice Live API (audio + data channel)
@@ -12,6 +12,11 @@ The server acts as a signaling proxy:
 
 Audio flows directly between the browser and Voice Live API over WebRTC
 (peer-to-peer RTP). Non-audio events travel over the WebRTC data channel.
+
+Agent Invocation:
+  Uses AgentSessionConfig pattern to connect with a Foundry Agent.
+  The agent encapsulates model, instructions, and voice config —
+  no model deployment name is needed on the client side.
 """
 
 import asyncio
@@ -19,6 +24,7 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlencode
 
 import logging
 
@@ -31,32 +37,40 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Load .env from workspace root
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_WORKSPACE_ROOT / ".env", override=True)
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration — Agent Invocation API
 # ---------------------------------------------------------------------------
 
-_FOUNDRY_ENDPOINT = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "").rstrip("/")
-_MODEL = os.environ.get("AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o-realtime")
-_AGENT_NAME = os.environ.get("AZURE_AI_AGENT_NAME", "")
-_PROJECT_NAME = os.environ.get("AZURE_AI_PROJECT_NAME", "")
+_FOUNDRY_ENDPOINT = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "").strip().rstrip("/")
+_AGENT_NAME = os.environ.get("AZURE_AI_PROMPT_AGENT_NAME", "").strip() or os.environ.get("AZURE_AI_AGENT_NAME", "").strip()
+_AGENT_VERSION = os.environ.get("AZURE_AI_AGENT_VERSION", "").strip()
+_PROJECT_NAME = os.environ.get("AZURE_AI_PROJECT_NAME", "").strip()
+_CONVERSATION_ID = os.environ.get("AZURE_AI_CONVERSATION_ID", "").strip()
+_FOUNDRY_RESOURCE_OVERRIDE = os.environ.get("FOUNDRY_RESOURCE_OVERRIDE", "").strip()
 _API_VERSION = "2026-01-01-preview"
 
-# Voice Live WebRTC endpoint uses /voice-live/realtime/calls
-# Build the base from the project endpoint (strip /api/projects/<name> if present)
-_VOICE_LIVE_HOST = os.environ.get("AZURE_VOICELIVE_ENDPOINT", "").rstrip("/")
+# Voice Live WebRTC endpoint
+_VOICE_LIVE_HOST = os.environ.get("AZURE_VOICELIVE_ENDPOINT", "").strip().rstrip("/")
+
+# Startup diagnostics
+logger.info("Config: AGENT_NAME=%r, PROJECT_NAME=%r, HOST=%r", _AGENT_NAME, _PROJECT_NAME, _VOICE_LIVE_HOST)
 
 
 def _build_voicelive_ws_url() -> str:
-    """Build the Voice Live WebRTC WebSocket URL.
+    """Build the Voice Live WebSocket URL for agent invocation.
 
-    Documented pattern:
-      wss://<resource>.services.ai.azure.com/voice-live/realtime/calls
-        ?api-version=...&model=...&agent_name=...&project_name=...
+    Documented endpoint pattern:
+      wss://<resource>.services.ai.azure.com/voice-live/realtime
+        ?api-version=...&agent_name=...&project_name=...
+
+    For agent invocation, agent_name and project_name are passed as
+    query parameters (no model parameter needed).
     """
     if _VOICE_LIVE_HOST:
         host = _VOICE_LIVE_HOST.replace("https://", "").replace("http://", "").split("/")[0]
@@ -69,18 +83,26 @@ def _build_voicelive_ws_url() -> str:
             "Set AZURE_VOICELIVE_ENDPOINT or AZURE_AI_PROJECT_ENDPOINT"
         )
 
-    url = f"wss://{host}/voice-live/realtime/calls?api-version={_API_VERSION}"
-    if _MODEL:
-        url += f"&model={_MODEL}"
+    # Build query parameters for agent invocation
+    # model is required for WebRTC /calls endpoint (Voice Live managed model)
+    params: dict[str, str] = {"api-version": _API_VERSION, "model": "gpt-realtime"}
     if _AGENT_NAME:
-        url += f"&agent_name={_AGENT_NAME}"
+        params["agent_name"] = _AGENT_NAME
     if _PROJECT_NAME:
-        url += f"&project_name={_PROJECT_NAME}"
+        params["project_name"] = _PROJECT_NAME
+    if _AGENT_VERSION:
+        params["agent_version"] = _AGENT_VERSION
+    if _CONVERSATION_ID:
+        params["conversation_id"] = _CONVERSATION_ID
+    if _FOUNDRY_RESOURCE_OVERRIDE:
+        params["foundry_resource_override"] = _FOUNDRY_RESOURCE_OVERRIDE
+
+    url = f"wss://{host}/voice-live/realtime/calls?{urlencode(params)}"
     return url
 
 
 async def _get_auth_token() -> str:
-    """Get a bearer token for the Voice Live API."""
+    """Get a bearer token for the Voice Live API (Entra ID required for agent invocation)."""
     credential = DefaultAzureCredential()
     token = await credential.get_token(
         "https://cognitiveservices.azure.com/.default"
@@ -93,7 +115,7 @@ async def _get_auth_token() -> str:
 # FastAPI app
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="CyclePro Voice Guide - WebRTC (Voice Live)")
+app = FastAPI(title="CyclePro Voice Guide - WebRTC (Voice Live Agent Invocation)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -106,7 +128,11 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "agent_name": _AGENT_NAME or None,
+        "project_name": _PROJECT_NAME or None,
+    }
 
 
 @app.get("/")
@@ -138,7 +164,7 @@ async def signaling_ws(ws: WebSocket):
     await ws.accept()
     logger.info("Browser signaling WebSocket connected")
 
-    # Get auth token and build Voice Live WebSocket URL
+    # Get auth token and build Voice Live WebSocket URL (agent invocation)
     try:
         token = await _get_auth_token()
         voicelive_url = _build_voicelive_ws_url()
@@ -148,7 +174,13 @@ async def signaling_ws(ws: WebSocket):
         await ws.close()
         return
 
-    logger.info(f"Connecting to Voice Live API: {voicelive_url}")
+    logger.info(
+        "Connecting to Voice Live API (agent invocation): agent=%s, project=%s, version=%s",
+        _AGENT_NAME,
+        _PROJECT_NAME,
+        _AGENT_VERSION or "latest",
+    )
+    logger.info(f"Voice Live URL: {voicelive_url}")
 
     # Connect to Voice Live API control channel
     headers = {"Authorization": f"Bearer {token}"}
@@ -158,6 +190,20 @@ async def signaling_ws(ws: WebSocket):
             additional_headers=headers,
             max_size=None,
         )
+    except websockets.exceptions.InvalidStatus as exc:
+        body = exc.response.body.decode() if exc.response.body else ""
+        logger.error(
+            "Voice Live API rejected connection: HTTP %s\nURL: %s\nResponse: %s",
+            exc.response.status_code,
+            voicelive_url,
+            body,
+        )
+        await ws.send_json({
+            "type": "error",
+            "message": f"Service connection failed: HTTP {exc.response.status_code} - {body}",
+        })
+        await ws.close()
+        return
     except Exception as exc:
         logger.error(f"Failed to connect to Voice Live API: {exc}")
         await ws.send_json({"type": "error", "message": f"Service connection failed: {exc}"})
@@ -207,8 +253,10 @@ async def signaling_ws(ws: WebSocket):
         await relay_task
     finally:
         # Clean up
-        if not service_ws.closed:
+        try:
             await service_ws.close()
+        except Exception:
+            pass
         logger.info("Signaling session ended")
 
 
@@ -218,5 +266,5 @@ async def signaling_ws(ws: WebSocket):
 
 if __name__ == "__main__":
     port = int(os.environ.get("WEBRTCLIVE_PORT", "8090"))
-    logger.info(f"Starting WebRTC Voice Live server on port {port}")
+    logger.info(f"Starting WebRTC Voice Live server on port {port} (agent: {_AGENT_NAME})")
     uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

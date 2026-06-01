@@ -21,7 +21,7 @@ USAGE:
 
     Environment variables (alternative to CLI args):
       AZURE_VOICELIVE_ENDPOINT
-      AZURE_AI_AGENT_NAME
+      AZURE_AI_HOSTED_AGENT_NAME
       AZURE_AI_PROJECT_NAME
 """
 
@@ -480,7 +480,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--agent-name",
-        default=os.getenv("AZURE_AI_AGENT_NAME", "bike-concierge"),
+        default=os.getenv("AZURE_AI_HOSTED_AGENT_NAME", "bike-concierge"),
         help="The name of the deployed agent (default: bike-concierge)",
     )
     parser.add_argument(
