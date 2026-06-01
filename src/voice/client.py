@@ -52,7 +52,7 @@ except ImportError:
     sys.exit(1)
 
 # Azure VoiceLive SDK imports
-from azure.ai.voicelive.aio import VoiceLiveConnection, connect, AgentSessionConfig
+from azure.ai.voicelive.aio import VoiceLiveConnection, connect
 from azure.ai.voicelive.models import (
     AudioEchoCancellation,
     AudioNoiseReduction,
@@ -194,8 +194,6 @@ class AudioProcessor:
                 out = out + packet.data[:num_to_take]
                 remaining_local = packet.data[num_to_take:]
 
-            # Update nonlocal remaining
-            nonlocal remaining  # noqa: E501 - already declared above
             remaining = remaining_local
 
             if len(out) >= frame_count:
@@ -261,18 +259,20 @@ class VoiceProductGuideClient:
     Voice client for the CyclePro bike support agent.
 
     Connects to a prompt-based agent deployed in Azure AI Foundry using
-    the VoiceLive SDK with AgentSessionConfig.
+    the VoiceLive SDK.
     """
 
     def __init__(
         self,
         endpoint: str,
         credential: AsyncTokenCredential,
-        agent_config: AgentSessionConfig,
+        agent_name: str,
+        project_name: str,
     ) -> None:
         self.endpoint = endpoint
         self.credential = credential
-        self.agent_config = agent_config
+        self.agent_name = agent_name
+        self.project_name = project_name
         self.connection: Optional[VoiceLiveConnection] = None
         self.audio_processor: Optional[AudioProcessor] = None
         self.session_ready = False
@@ -282,15 +282,16 @@ class VoiceProductGuideClient:
         try:
             logger.info(
                 "Connecting to VoiceLive API with agent %s for project %s",
-                self.agent_config.get("agent_name"),
-                self.agent_config.get("project_name"),
+                self.agent_name,
+                self.project_name,
             )
 
-            # Connect using AgentSessionConfig
+            # Connect with agent name and project
             async with connect(
                 endpoint=self.endpoint,
                 credential=self.credential,
-                agent_config=self.agent_config,
+                agent_name=self.agent_name,
+                project_name=self.project_name,
             ) as connection:
                 conn = connection
                 self.connection = conn
@@ -308,8 +309,8 @@ class VoiceProductGuideClient:
                 logger.info("Voice assistant ready! Start speaking...")
                 print("\n" + "=" * 60)
                 print("  CYCLEPRO VOICE PRODUCT GUIDE")
-                print(f"  Agent: {self.agent_config.get('agent_name')}")
-                print(f"  Project: {self.agent_config.get('project_name')}")
+                print(f"  Agent: {self.agent_name}")
+                print(f"  Project: {self.project_name}")
                 print("  Start speaking to begin conversation")
                 print("  Press Ctrl+C to exit")
                 print("=" * 60 + "\n")
@@ -435,18 +436,14 @@ class VoiceProductGuideClient:
 
 async def run_assistant(endpoint: str, agent_name: str, project_name: str):
     """Run the voice assistant."""
-    agent_config: AgentSessionConfig = {
-        "agent_name": agent_name,
-        "project_name": project_name,
-    }
-
     credential: AsyncTokenCredential = DefaultAzureCredential()
     logger.info("Using DefaultAzureCredential")
 
     assistant = VoiceProductGuideClient(
         endpoint=endpoint,
         credential=credential,
-        agent_config=agent_config,
+        agent_name=agent_name,
+        project_name=project_name,
     )
 
     await assistant.start()
