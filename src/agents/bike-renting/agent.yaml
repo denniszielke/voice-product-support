@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/microsoft/AgentSchema/refs/heads/main/schemas/v1.0/ContainerAgent.yaml
+
+kind: hosted
+name: bike-renting-python-invocations-voicelive
+description: |
+    A bike rental agent demonstrating voice + click interactions. Customers can
+    browse the available rental fleet, pick a bike, reserve it for 30 minutes,
+    and confirm a multi-day booking. Designed for Voice Live SDK multi-modal
+    scenarios.
+metadata:
+    tags:
+        - AI Agent Hosting
+        - Azure AI AgentServer
+        - Invocations Protocol
+        - Streaming
+        - Voice + Click
+    voiceLiveCompatible: "true"
+protocols:
+    - protocol: invocations
+      version: 1.0.0
+resources:
+    cpu: "0.5"
+    memory: 1Gi
+environment_variables: []
