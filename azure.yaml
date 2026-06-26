@@ -1,20 +1,41 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
 name: voice-product-support
 metadata:
-  template: voice-product-support@1.0.0
-hooks:
-  postdeploy:
-    - name: copy-env-file
-      description: Copy environment file from azd environment folder
-      shell: sh
-      run: cp .azure/$AZURE_ENV_NAME/.env ./
-    - name: deploy-agents
-      description: Build container images and deploy all agents to Foundry
-      shell: sh
-      run: |
-        python3 -m venv .venv
-        . .venv/bin/activate
-        pip install --quiet --upgrade pip
-        pip install --quiet -r src/requirements.txt
-        cd tools && python3 deploy_agents.py
+    template: voice-product-support@1.0.0
+services:
+    voice-product-guide:
+        project: .
+        host: azure.ai.agent
+        language: docker
+        docker:
+            remoteBuild: true
+        config:
+            container:
+                resources:
+                    cpu: "0.5"
+                    memory: 1Gi
+            deployments:
+                - model:
+                    format: OpenAI
+                    name: gpt-5.4-mini
+                    version: "2026-03-17"
+                  name: gpt-5.4-mini
+                  sku:
+                    capacity: 941
+                    name: GlobalStandard
 infra:
-  provider: bicep
+    provider: bicep
+hooks:
+    postdeploy:
+        - name: copy-env-file
+          shell: sh
+          run: cp .azure/$AZURE_ENV_NAME/.env ./
+        - name: deploy-agents
+          shell: sh
+          run: |
+            python3 -m venv .venv
+            . .venv/bin/activate
+            pip install --quiet --upgrade pip
+            pip install --quiet -r src/requirements.txt
+            cd tools && python3 deploy_agents.py
