@@ -48,9 +48,25 @@ load_dotenv(_WORKSPACE_ROOT / ".env", override=True)
 # ---------------------------------------------------------------------------
 
 _FOUNDRY_ENDPOINT = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "").strip().rstrip("/")
-_AGENT_NAME = os.environ.get("AZURE_AI_PROMPT_AGENT_NAME", "").strip() or os.environ.get("AZURE_AI_AGENT_NAME", "").strip()
+
+# Bind to the `bike-support` *workflow* agent by default (deployed by
+# tools/deploy_workflow_agents.py). The workflow is what actually performs
+# the handoff to the specialist agents: it calls `bike-concierge` to
+# classify intent, then routes to product-guide / support-hotline /
+# repair-status. Binding to `bike-concierge` alone only returns routing
+# JSON and never reaches a specialist.
+_DEFAULT_AGENT_NAME = "bike-support"
+_AGENT_NAME = (
+    os.environ.get("AZURE_AI_AGENT_NAME", "").strip()
+    or os.environ.get("AZURE_AI_WORKFLOW_AGENT_NAME", "").strip()
+    or _DEFAULT_AGENT_NAME
+)
 _AGENT_VERSION = os.environ.get("AZURE_AI_AGENT_VERSION", "").strip()
 _PROJECT_NAME = os.environ.get("AZURE_AI_PROJECT_NAME", "").strip()
+# Fall back to the project name embedded in the Foundry endpoint path, e.g.
+# https://<resource>.services.ai.azure.com/api/projects/<project> -> <project>
+if not _PROJECT_NAME and _FOUNDRY_ENDPOINT:
+    _PROJECT_NAME = _FOUNDRY_ENDPOINT.rstrip("/").rsplit("/", 1)[-1]
 _CONVERSATION_ID = os.environ.get("AZURE_AI_CONVERSATION_ID", "").strip()
 _FOUNDRY_RESOURCE_OVERRIDE = os.environ.get("FOUNDRY_RESOURCE_OVERRIDE", "").strip()
 _API_VERSION = "2026-01-01-preview"
@@ -67,9 +83,9 @@ def _build_voicelive_ws_url() -> str:
 
     Documented endpoint pattern:
       wss://<resource>.services.ai.azure.com/voice-live/realtime
-        ?api-version=...&agent_name=...&project_name=...
+        ?api-version=...&agent-name=...&agent-project-name=...
 
-    For agent invocation, agent_name and project_name are passed as
+    For agent invocation, agent-name and agent-project-name are passed as
     query parameters (no model parameter needed).
     """
     if _VOICE_LIVE_HOST:
@@ -87,11 +103,11 @@ def _build_voicelive_ws_url() -> str:
     # model is required for WebRTC /calls endpoint (Voice Live managed model)
     params: dict[str, str] = {"api-version": _API_VERSION, "model": "gpt-realtime"}
     if _AGENT_NAME:
-        params["agent_name"] = _AGENT_NAME
+        params["agent-name"] = _AGENT_NAME
     if _PROJECT_NAME:
-        params["project_name"] = _PROJECT_NAME
+        params["agent-project-name"] = _PROJECT_NAME
     if _AGENT_VERSION:
-        params["agent_version"] = _AGENT_VERSION
+        params["agent-version"] = _AGENT_VERSION
     if _CONVERSATION_ID:
         params["conversation_id"] = _CONVERSATION_ID
     if _FOUNDRY_RESOURCE_OVERRIDE:
@@ -104,8 +120,10 @@ def _build_voicelive_ws_url() -> str:
 async def _get_auth_token() -> str:
     """Get a bearer token for the Voice Live API (Entra ID required for agent invocation)."""
     credential = DefaultAzureCredential()
+    # Agent invocation requires a token scoped to the AI Foundry Agent
+    # service audience (https://ai.azure.com), not cognitiveservices.
     token = await credential.get_token(
-        "https://cognitiveservices.azure.com/.default"
+        "https://ai.azure.com/.default"
     )
     await credential.close()
     return token.token
