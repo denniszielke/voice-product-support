@@ -24,6 +24,88 @@ A voice-enabled product support hotline for bike recommendations, troubleshootin
                     └────────────┘
 ```
 
+## Narrative
+
+![narrative](./docs/product-guide-scenario.png)
+
+This project demonstrates the different options for protocol-based communication across an
+agentic system. It focuses on **A2A**, **MCP**, **AG-UI**, **ACP**, the **Responses API** and
+the **Invocations API**, and shows how they fit together across three layers:
+
+1. **User experiences** — how humans reach the system: web apps, mobile clients, and phone /
+   voice integrations.
+2. **Agents** — the reasoning units, exposed via the Invocations API, the Responses API, or A2A.
+3. **Context providers** — the tools and data sources agents draw on, surfaced via MCP
+   (MCP servers and MCP-capable agents).
+
+The same bike-support domain is wired up repeatedly through these different protocols so the
+trade-offs between them become concrete rather than abstract.
+
+### Layer 1 — User experiences
+
+| Experience | Channel | Backend protocol | Where in the repo |
+| --- | --- | --- | --- |
+| Browser web app (WebRTC) | Low-latency audio + data channel | VoiceLive → hosted agent | [src/webrtclive](src/webrtclive), [src/webrtcpipecat](src/webrtcpipecat) |
+| Browser web app (WS proxy) | Binary PCM + JSON over WebSocket | VoiceLive → hosted agent | [src/webclient](src/webclient) |
+| Local voice client (mic/speaker) | VoiceLive STT/TTS | Responses / Invocations / MCP | [src/voice](src/voice), [src/voice-invocation](src/voice-invocation) |
+| Click + voice rental UI | WebRTC + UI events | Invocations API (SSE) | [src/webrtc-bike-rental](src/webrtc-bike-rental) |
+| Phone / hotline integration | Streamed spoken turns | VoiceLive → workflow agent | [src/workflows/bike-support.yaml](src/workflows/bike-support.yaml) |
+
+### Layer 2 — Agents and their exposure protocols
+
+| Agent | Type | Exposed via | Notes |
+| --- | --- | --- | --- |
+| `bike-concierge` | Prompt agent | Responses API | Intent classifier / router with structured JSON output |
+| `product-guide` | Hosted (Agent Framework) | Responses API + A2A | AI Search–grounded catalogue answers |
+| `support-hotline` | Hosted (Agent Framework) | Responses API + A2A | Bing-grounded troubleshooting via Foundry Toolbox **MCP** |
+| `repair-status` | Hosted (LangGraph) | Responses API + A2A | Stateful repair scheduling tools |
+| `bike-renting` | Hosted (Invocations) | **Invocations API** | Voice + click rental, custom UI/SSE events |
+| `voice-live-mcp` | Local voice agent | VoiceLive + **MCP** | Self-contained local demo, no hosted agent |
+| `bike-support` | Workflow | Responses API | Orchestrates the concierge + specialists |
+
+### Layer 3 — Context providers (MCP)
+
+| Provider | Kind | Tools exposed | Consumed by |
+| --- | --- | --- | --- |
+| `bike-rental` MCP server | Streamable-HTTP MCP server | `search_bikes`, `get_bike`, `reserve_bike`, `confirm_booking`, `cancel_reservation`, … | `voice-live-mcp`, any MCP client |
+| Foundry Toolbox (Bing Custom Web Search) | Hosted MCP toolbox | Web search / grounding | `support-hotline` |
+
+### Choosing a protocol: Invocations vs Responses vs MCP vs A2A
+
+The four protocols are largely **orthogonal**, not competing — they differ mainly in *how much
+the platform manages state and orchestration*, and in their latency and concurrency profiles.
+
+- **Invocation API** — a raw, low-level endpoint optimised for performance and flexibility. The
+  client or container fully controls state, orchestration, and async behaviour. Lowest latency,
+  best for real-time voice / WebRTC pipelines and backend-controlled orchestration.
+- **Responses API** — a higher-level abstraction with built-in agent loops, optional
+  conversation state, and integrated tool execution. Simplifies development at the cost of
+  slightly more overhead from managed orchestration. Ideal for most enterprise agents.
+- **MCP** — a lightweight, mostly stateless request/response (with optional streaming) layer for
+  synchronous or near-real-time access to external tools and data. Minimal overhead; used
+  whenever agents need structured access to enterprise tools and data systems.
+- **A2A** — designed for asynchronous, stateful collaboration *between agents*, where
+  long-running tasks, delegation, and progress tracking are first-class. Highest latency envelope
+  due to network hops and task-lifecycle management; used in multi-agent architectures that
+  coordinate complex workflows or integrate across platforms.
+
+| Dimension | Invocation API | Responses API | MCP | A2A |
+| --- | --- | --- | --- | --- |
+| Abstraction level | Raw / low-level | High-level agent loop | Tool-invocation layer | Agent collaboration layer |
+| State management | Stateless (developer-managed) | Flexible / partially or fully managed | Not enforced (client/server-managed) | Stateful at the task level |
+| Orchestration | Client/container controlled | Platform-managed agent loop | None (caller orchestrates) | Task delegation + lifecycle |
+| Sync vs async | Sync + optional streaming | Sync + optional streaming | Sync + streaming, short-lived | Async, long-running, resumable |
+| Latency profile | Lowest | Slightly higher | Minimal overhead | Highest envelope |
+| Best for | Real-time UX, custom runtimes, backend orchestration | Most enterprise agents, built-in reasoning | Structured tool / data access | Multi-agent coordination & delegation |
+
+**Sources:** [Manage hosted sessions (learn.microsoft.com)](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/manage-hosted-sessions) ·
+[Migrate to Responses API (developers.openai.com)](https://developers.openai.com/api/docs/guides/migrate-to-responses) ·
+[MCP vs A2A (stackone.com)](https://www.stackone.com/blog/mcp-vs-a2a-protocol/) ·
+[A2A vs MCP — when to use which (stride.build)](https://www.stride.build/blog/agent-to-agent-a2a-vs-model-context-protocol-mcp-when-to-use-which) ·
+[Invocations basic sample (github.com)](https://github.com/microsoft-foundry/foundry-samples/tree/main/samples/python/hosted-agents/agent-framework/invocations/01-basic) ·
+[A2A streaming & async (a2a-protocol.org)](https://a2a-protocol.org/latest/topics/streaming-and-async/)
+
+
 ## Agents
 
 ### 1. `bike-concierge` — Prompt Agent
