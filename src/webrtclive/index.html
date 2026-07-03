@@ -152,6 +152,12 @@ async function startSession() {
     };
 
     // 4. Get microphone access
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error(
+        'Microphone API unavailable. Open this page over https:// or via ' +
+        'http://localhost / http://127.0.0.1 (a secure context is required for getUserMedia).'
+      );
+    }
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     log('Microphone access granted');
