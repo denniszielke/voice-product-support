@@ -1,0 +1,4 @@
+# Pipecat Azure Realtime async-tool demo dependencies
+pipecat-ai[azure,webrtc,silero]==1.6.0
+python-dotenv>=1.0.0
+loguru>=0.7.0

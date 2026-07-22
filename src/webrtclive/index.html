@@ -188,12 +188,35 @@ async function startSession() {
     });
     log('ICE gathering complete');
 
-    // 8. Send SDP offer through signaling channel
+    // 8. Send SDP offer through signaling channel.
+    // Pass the initial session config INLINE with call creation. Setting
+    // turn_detection here (rather than via a later session.update) is the only
+    // way to use azure_semantic_vad with an agent session: the service locks
+    // the turn-detection TYPE once the session exists, so a post-creation
+    // change is rejected ("Cannot change turn detection type during session").
+    //  - azure_semantic_vad + eagerness:high => "transcription mode": the
+    //    service chunks audio aggressively and streams interim results while
+    //    the user is still speaking.
+    //  - azure-speech is the streaming recognizer compatible with agents.
+    // NOTE: `instructions`/`voice` are intentionally omitted — the agent owns
+    // those, and `instructions` is rejected for custom-agent sessions.
     signalWs.send(JSON.stringify({
       type: 'rtc.call.sdp.create',
-      sdp_offer: pc.localDescription.sdp
+      sdp_offer: pc.localDescription.sdp,
+      session: {
+        input_audio_transcription: { model: 'azure-speech', language: 'en' },
+        turn_detection: {
+          type: 'azure_semantic_vad',
+          eagerness: 'high',
+          // Shorten the end-of-speech silence window so turns commit sooner and
+          // the transcript appears faster after the user pauses. (Voice Live
+          // transcribes per committed turn — it can't caption mid-utterance —
+          // so this is the main lever for perceived responsiveness.)
+          silence_duration_ms: 400,
+        },
+      },
     }));
-    log('SDP offer sent to Voice Live API');
+    log('SDP offer sent to Voice Live API (with streaming-transcription session config)');
 
     // 9. Listen for messages on the signaling WebSocket
     signalWs.onmessage = (event) => {
@@ -248,6 +271,9 @@ function handleSignalingMessage(msg) {
 
     case 'session.created':
       log(`Session created: ${msg.session?.id || 'unknown'}`);
+      // Streaming transcription + turn detection are configured inline with
+      // rtc.call.sdp.create (see startSession), because the turn-detection type
+      // cannot be changed after the session exists. Nothing to do here.
       break;
 
     case 'session.updated':
@@ -287,6 +313,7 @@ function handleDataChannelEvent(msg) {
 
   switch (type) {
     case 'input_audio_buffer.speech_started':
+      log('🎤 speech_started');
       setIndicator('listening');
       // Reset user transcript accumulator
       userTranscript = '';
@@ -294,10 +321,12 @@ function handleDataChannelEvent(msg) {
       break;
 
     case 'input_audio_buffer.speech_stopped':
+      log('🔇 speech_stopped');
       setIndicator('');
       break;
 
     case 'conversation.item.input_audio_transcription.completed':
+      log(`✅ transcription.completed: "${msg.transcript || ''}"`);
       // Final user speech transcription
       if (msg.transcript) {
         if (userBubble) {
@@ -311,6 +340,7 @@ function handleDataChannelEvent(msg) {
       break;
 
     case 'conversation.item.input_audio_transcription.delta':
+      log(`… transcription.delta: "${msg.delta || ''}"`);
       userTranscript += (msg.delta || '');
       if (!userBubble) {
         userBubble = addBubble(userTranscript, 'user');

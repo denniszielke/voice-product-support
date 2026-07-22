@@ -1,11 +1,11 @@
-langgraph==1.2.2
-azure-ai-agentserver-invocations==1.0.0b4
-azure-ai-agentserver-responses==1.0.0b7
-azure-ai-agentserver-core==2.0.0b5
-langchain-openai>=0.4.0
+langgraph==1.2.9
+azure-ai-agentserver-invocations==1.0.0b6
+azure-ai-agentserver-responses==1.0.0b8
+azure-ai-agentserver-core==2.0.0b8
+langchain-openai>=1.4.0
 httpx>=0.25.2
 
 azure-identity==1.25.3
 python-dotenv==1.2.2
-azure-monitor-opentelemetry==1.8.8
-openai-agents>=0.0.7
+azure-monitor-opentelemetry==1.8.9
+openai-agents>=0.18.0

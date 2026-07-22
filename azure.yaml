@@ -38,4 +38,4 @@ hooks:
             . .venv/bin/activate
             pip install --quiet --upgrade pip
             pip install --quiet -r src/requirements.txt
-            cd tools && python3 deploy_agents.py
+            python3 -m scripts.deploy_agents

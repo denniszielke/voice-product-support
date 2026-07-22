@@ -1,9 +1,12 @@
 # Pipecat WebRTC server dependencies
-pipecat-ai[azure,silero,smallwebrtc]==0.0.75
-pipecat-ai-subagents==0.0.4
+pipecat-ai[azure,webrtc]==1.6.0
+pipecat-ai-subagents==0.6.0
 aiortc>=1.9.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-dotenv>=1.0.0
 loguru>=0.7.0
 azure-identity>=1.15.0
+# aiortc -> pyopenssl needs cryptography>=49; older msal caps it at <49.
+# msal 1.37+ widens the cap to <51, keeping azure-identity and aiortc compatible.
+msal>=1.37.0

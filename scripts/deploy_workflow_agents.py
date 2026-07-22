@@ -1,13 +1,10 @@
 """Deploy workflow agents from YAML definitions to Azure AI Foundry."""
 
-import sys
 from pathlib import Path
 
 from azure.ai.projects.models import WorkflowAgentDefinition
 
-# Allow running from tools/ directory
-sys.path.insert(0, str(Path(__file__).parent))
-from deploy_helpers import get_client
+from .deploy_helpers import get_client
 
 
 def deploy() -> None:

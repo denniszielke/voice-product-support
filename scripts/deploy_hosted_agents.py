@@ -5,26 +5,29 @@ from pathlib import Path
 
 from azure.ai.projects.models import (
     HostedAgentDefinition,
+    ContainerConfiguration,
     ProtocolVersionRecord,
-    AgentProtocol,
-    AgentEndpoint,
+    AgentEndpointConfig,
     AgentEndpointProtocol,
+    ProtocolConfiguration,
+    ResponsesProtocolConfiguration,
+    A2AProtocolConfiguration,
+    InvocationsProtocolConfiguration,
     AgentCard,
     AgentCardSkill,
 )
 
-# Allow running from tools/ directory
+# Make the `agents` package under src/ importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent))
 
 from agents import discover_hosted_agents
-from deploy_helpers import (
+from .deploy_helpers import (
     assign_azure_ai_user_role,
     build_image,
     get_client,
     get_env,
 )
-from deploy_toolbox import TOOLBOX_NAME
+from .deploy_toolbox import TOOLBOX_NAME
 
 
 # Agent card definitions keyed by agent name
@@ -94,7 +97,7 @@ def deploy() -> None:
     registry = get_env("AZURE_CONTAINER_REGISTRY_ENDPOINT")
     project_arm_id = get_env("AZURE_AI_PROJECT_ID", required=False, default="") or ""
 
-    protocols = [ProtocolVersionRecord(protocol=AgentProtocol.RESPONSES, version="1.0.0")]
+    protocols = [ProtocolVersionRecord(protocol=AgentEndpointProtocol.RESPONSES, version="1.0.0")]
 
     toolbox_endpoint = f"{project_endpoint}/toolboxes/{TOOLBOX_NAME}/mcp?api-version=v1"
 
@@ -124,10 +127,10 @@ def deploy() -> None:
             agent_name=config.name,
             description=config.description,
             definition=HostedAgentDefinition(
-                container_protocol_versions=protocols,
+                protocol_versions=protocols,
                 cpu=config.cpu,
                 memory=config.memory,
-                image=image_tag,
+                container_configuration=ContainerConfiguration(image=image_tag),
                 environment_variables=env_vars,
             ),
             metadata={"enableVnextExperience": "true", "voiceLiveCompatible": "true"},
@@ -135,16 +138,16 @@ def deploy() -> None:
         )
         print(f"Hosted agent '{config.name}' created: {agent.id}")
 
-        endpoint_config = AgentEndpoint(
-            protocols=[
-                AgentEndpointProtocol.RESPONSES,
-                AgentEndpointProtocol.A2A,
-                AgentEndpointProtocol.INVOCATIONS,
-            ],
+        endpoint_config = AgentEndpointConfig(
+            protocol_configuration=ProtocolConfiguration(
+                responses=ResponsesProtocolConfiguration(),
+                a2a=A2AProtocolConfiguration(),
+                invocations=InvocationsProtocolConfiguration(),
+            ),
         )
         agent_card = AGENT_CARDS.get(config.name)
         if agent_card:
-            client.beta.agents.patch_agent_details(
+            client.agents.update_details(
                 agent_name=config.name,
                 agent_endpoint=endpoint_config,
                 agent_card=agent_card,
