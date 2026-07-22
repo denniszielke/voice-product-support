@@ -49,6 +49,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
+from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.azure.realtime.llm import AzureRealtimeLLMService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.realtime.events import (
@@ -58,11 +59,14 @@ from pipecat.services.openai.realtime.events import (
     SessionProperties,
 )
 from pipecat.transports.base_transport import BaseTransport, TransportParams
+from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
 
-# Load .env from the workspace root so this demo shares the repo's config.
+# Load the workspace-root .env first (shared repo config), then this demo's
+# local .env so its values take precedence when both are present.
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_WORKSPACE_ROOT / ".env", override=True)
+load_dotenv(Path(__file__).with_name(".env"), override=True)
 
 # Make the shared bike catalogue importable.
 _SRC_ROOT = Path(__file__).resolve().parent.parent
@@ -145,6 +149,12 @@ transport_params = {
     "webrtc": lambda: TransportParams(
         audio_in_enabled=True,
         audio_out_enabled=True,
+    ),
+    "websocket": lambda: FastAPIWebsocketParams(
+        audio_in_enabled=True,
+        audio_out_enabled=True,
+        add_wav_header=False,
+        serializer=ProtobufFrameSerializer(),
     ),
 }
 

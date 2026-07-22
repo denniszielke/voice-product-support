@@ -51,9 +51,13 @@ from pipecat.services.azure.tts import AzureTTSService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
-# Load .env from the workspace root (two levels up from this file).
+# Load the .env that sits next to this bot first (it holds the Azure Speech /
+# OpenAI credentials), then fall back to the workspace-root .env for anything
+# not already set.
+_BOT_DIR = Path(__file__).resolve().parent
 _WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(_WORKSPACE_ROOT / ".env", override=True)
+load_dotenv(_BOT_DIR / ".env", override=True)
+load_dotenv(_WORKSPACE_ROOT / ".env", override=False)
 
 
 SYSTEM_INSTRUCTION = """\
@@ -80,6 +84,12 @@ transport_params = {
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
     """Wire up the STT → LLM → TTS pipeline and run it on the given transport."""
     logger.info("Starting CyclePro Azure voice bot")
+
+    # The Pipecat runner (pipecat.runner.run) calls ``load_dotenv(override=True)``
+    # at import time, which picks up the workspace-root .env and clobbers the
+    # credentials we set at module import. Re-apply this bot's own .env here, at
+    # runtime, so the correct Azure endpoint/keys always win.
+    load_dotenv(_BOT_DIR / ".env", override=True)
 
     stt = AzureSTTService(
         api_key=os.environ["AZURE_SPEECH_API_KEY"],
