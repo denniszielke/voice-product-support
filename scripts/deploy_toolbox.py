@@ -4,7 +4,7 @@ import os
 
 from azure.ai.projects.models import WebSearchTool
 
-from deploy_helpers import get_client, get_env
+from .deploy_helpers import get_client, get_env
 
 TOOLBOX_NAME = "bikesupport-tools"
 
@@ -41,7 +41,7 @@ def deploy() -> None:
 
     project_endpoint = get_env("AZURE_AI_PROJECT_ENDPOINT")
 
-    version = client.beta.toolboxes.create_version(
+    version = client.toolboxes.create_version(
         name=TOOLBOX_NAME,
         description="CyclePro AI shared toolbox — Bing Custom Web Search for bike support",
         tools=[web_search],

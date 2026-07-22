@@ -1,21 +1,19 @@
 """Deploy prompt-based agents to Azure AI Foundry."""
 
-import sys
-from pathlib import Path
-
 from azure.ai.projects.models import (
     PromptAgentDefinition,
     PromptAgentDefinitionTextOptions,
     TextResponseFormatJsonSchema,
-    AgentEndpoint,
-    AgentEndpointProtocol,
+    AgentEndpointConfig,
+    ProtocolConfiguration,
+    ResponsesProtocolConfiguration,
+    A2AProtocolConfiguration,
+    InvocationsProtocolConfiguration,
     AgentCard,
     AgentCardSkill,
 )
 
-# Allow running from tools/ directory
-sys.path.insert(0, str(Path(__file__).parent))
-from deploy_helpers import get_client, get_env
+from .deploy_helpers import get_client, get_env
 
 
 CONCIERGE_SYSTEM_PROMPT = """\
@@ -94,12 +92,12 @@ def deploy() -> None:
         ),
     )
 
-    endpoint_config = AgentEndpoint(
-        protocols=[
-            AgentEndpointProtocol.RESPONSES,
-            AgentEndpointProtocol.A2A,
-            AgentEndpointProtocol.INVOCATIONS,
-        ],
+    endpoint_config = AgentEndpointConfig(
+        protocol_configuration=ProtocolConfiguration(
+            responses=ResponsesProtocolConfiguration(),
+            a2a=A2AProtocolConfiguration(),
+            invocations=InvocationsProtocolConfiguration(),
+        ),
     )
 
     agent_card = AgentCard(
@@ -114,7 +112,7 @@ def deploy() -> None:
         ],
     )
 
-    client.beta.agents.patch_agent_details(
+    client.agents.update_details(
         agent_name="bike-concierge",
         agent_endpoint=endpoint_config,
         agent_card=agent_card,

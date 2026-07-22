@@ -1,0 +1,6 @@
+# CyclePro Pipecat voice bot — Azure STT + Azure OpenAI LLM + Azure TTS
+# Follows the pipecat voice-azure example. The `runner` extra serves the
+# built-in WebRTC dev client (pipecat-ai-prebuilt).
+pipecat-ai[azure,webrtc,runner]==1.6.0
+python-dotenv>=1.0.0
+loguru>=0.7.0

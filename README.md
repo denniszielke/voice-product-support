@@ -282,7 +282,8 @@ WebRTC data channel.
   /data                 — Bike sample data (catalogue, repairs, FAQs)
   /workflows            — Workflow YAML definition (bike-support)
   /a2a                  — A2A test clients
-/tools
+/scripts                — Deployment package (run as `python -m scripts.<name>`)
+  __init__.py
   deploy_agents.py      — Deploy all agents (orchestrator)
   deploy_prompt_agents.py
   deploy_toolbox.py
@@ -343,7 +344,7 @@ Bing Custom Search, Storage, Log Analytics, and Application Insights.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r src/requirements.txt
-cd tools && python deploy_agents.py
+python -m scripts.deploy_agents
 ```
 
 ### 3. Test with A2A clients
@@ -356,7 +357,7 @@ python a2a/support-hotline-agent-client.py
 
 ### 4. Delete all agents
 ```bash
-cd tools && python delete_agents.py
+python -m scripts.delete_agents
 ```
 
 ## Environment Variables

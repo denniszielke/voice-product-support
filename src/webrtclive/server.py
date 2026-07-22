@@ -50,7 +50,7 @@ load_dotenv(_WORKSPACE_ROOT / ".env", override=True)
 _FOUNDRY_ENDPOINT = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "").strip().rstrip("/")
 
 # Bind to the `bike-support` *workflow* agent by default (deployed by
-# tools/deploy_workflow_agents.py). The workflow is what actually performs
+# scripts/deploy_workflow_agents.py). The workflow is what actually performs
 # the handoff to the specialist agents: it calls `bike-concierge` to
 # classify intent, then routes to product-guide / support-hotline /
 # repair-status. Binding to `bike-concierge` alone only returns routing

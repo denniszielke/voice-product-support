@@ -3,12 +3,11 @@
 import sys
 from pathlib import Path
 
-# Allow running from tools/ directory
+# Make the `agents` package under src/ importable
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-sys.path.insert(0, str(Path(__file__).parent))
 
 from agents import discover_hosted_agents
-from deploy_helpers import get_client
+from .deploy_helpers import get_client
 
 # All agent names managed by this project
 ALL_AGENT_NAMES = [
